@@ -1,0 +1,31 @@
+# Core Dependencies
+python-dotenv==1.0.0
+requests>=2.32.5,<3.0.0
+beautifulsoup4==4.14.3
+
+# LangChain and AI (compatible with LOL coach versions)
+langchain==1.2.0
+langchain-community==0.4.1
+langchain-core==1.2.4
+langchain-openai==1.1.6
+langgraph>=1.0.2,<1.1.0
+
+# Financial Data APIs
+yfinance==0.2.36
+alpha-vantage==2.3.1
+
+# Vector Store for RAG (same as LOL coach)
+faiss-cpu==1.13.1
+
+# Web Interface (same as LOL coach - already installed!)
+gradio==6.2.0
+
+# News API (optional)
+newsapi-python==0.2.7
+
+# Web Scraping (same as LOL coach)
+lxml==5.1.0
+
+# Utilities (compatible versions)
+pydantic>=2.7.4,<3.0.0
+tiktoken>=0.7.0,<1.0.0
