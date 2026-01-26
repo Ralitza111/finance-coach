@@ -3,6 +3,7 @@
 **Project Name:** AI Finance Assistant  
 **Date:** January 24, 2026  
 **Author:** Ralitza Mondal  
+hugging face: https://huggingface.co/spaces/Ralitza1/FinanceCoach
 
 ---
 
