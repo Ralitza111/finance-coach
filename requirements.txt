@@ -10,6 +10,9 @@ langchain-core==1.2.4
 langchain-openai==1.1.6
 langgraph>=1.0.2,<1.1.0
 
+# LangSmith for Evaluation
+langsmith>=0.1.0
+
 # Financial Data APIs
 yfinance==0.2.36
 alpha-vantage==2.3.1

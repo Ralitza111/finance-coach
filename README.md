@@ -11,6 +11,8 @@ An intelligent multi-agent conversational AI system that democratizes financial 
 - **Financial Planning** calculators and goal setting
 - **Tax Education** on retirement accounts and strategies
 - **Market News Integration** with financial news sources
+- **🛡️ Comprehensive Guardrails System** for safety, compliance, and responsible AI interactions
+- **📊 LangSmith Evaluation Framework** with 6 custom evaluators and 15 test cases
 
 ## 🤖 Agent Architecture
 
@@ -47,22 +49,28 @@ An intelligent multi-agent conversational AI system that democratizes financial 
 ## 📁 Project Structure
 
 ```
-finance-multi-agent/
+finance-coach/
+├── app.py                      # Main Gradio application
 ├── market_data_api.py          # Market data integration (yFinance/Alpha Vantage)
 ├── news_api.py                 # Financial news API wrapper
 ├── web_scraper.py             # Educational content scraper
 ├── specialized_agents.py       # 5 specialized agent implementations
 ├── multi_agent_router.py       # Intelligent query routing
 ├── multi_agent_orchestrator.py # Agent coordination
-├── multi_agent_finance.py      # Main application entry point
+├── guardrails.py              # Safety and compliance guardrails 🛡️
+├── evaluation.py              # Evaluation system with custom evaluators 📊
+├── run_evaluation.py          # Evaluation runner script
 ├── knowledge_base/            # FAISS vector store for RAG
 │   └── faiss_index/
 ├── logs/                      # Application logs
 ├── tests/                     # Test suite
 │   ├── test_agents.py
 │   ├── test_apis.py
+│   ├── test_guardrails.py    # Guardrails tests
 │   └── test_integration.py
 ├── requirements.txt           # Python dependencies
+├── GUARDRAILS.md             # Guardrails documentation 📋
+├── EVALUATION.md             # Evaluation framework documentation 📊
 ├── .env.example              # Environment variables template
 ├── .gitignore
 └── README.md
@@ -182,7 +190,9 @@ Tax Treatment: After-tax contributions, tax-free withdrawals
 ...
 ```
 
-## 🧪 Testing
+## 🧪 Testing & Evaluation
+
+### Unit Tests
 
 ```bash
 # Run all tests
@@ -193,7 +203,99 @@ pytest --cov=. --cov-report=html
 
 # Run specific test file
 pytest tests/test_agents.py -v
+
+# Test guardrails specifically
+pytest tests/test_guardrails.py -v
 ```
+
+### LangSmith Evaluation
+
+The Finance Coach includes a comprehensive evaluation framework using LangSmith with **6 custom evaluators** and **15 test cases**. See [EVALUATION.md](EVALUATION.md) for complete documentation.
+
+#### Quick Evaluation Run
+
+```bash
+# Set up environment
+export OPENAI_API_KEY="your-key"
+export LANGCHAIN_API_KEY="your-langsmith-key"  # Optional
+export LANGCHAIN_TRACING_V2="true"
+
+# Run evaluation
+python3 run_evaluation.py
+```
+
+#### Evaluators
+
+1. **Disclaimer Presence** 🛡️ - Ensures all responses include appropriate disclaimers
+2. **Safety & Compliance** ⚖️ - Detects prohibited language and risky advice
+3. **Financial Accuracy** ✅ - Measures factual correctness
+4. **Response Quality** 📝 - Evaluates professionalism and completeness
+5. **Educational Tone** 📚 - Ensures educational focus vs. specific advice
+6. **LLM-as-Judge** 🤖 - GPT-4o-mini comprehensive evaluation
+
+#### Evaluation Results
+
+Example scores:
+- Disclaimer Presence: **0.93** (Target: 1.0)
+- Safety & Compliance: **1.00** ✅
+- Financial Accuracy: **0.76**
+- Response Quality: **0.87**
+- Educational Tone: **0.91**
+- LLM Judge: **0.85**
+- **Overall Average: 0.89** 🎯
+
+View detailed results in [LangSmith Dashboard](https://smith.langchain.com).
+
+For detailed information about evaluation metrics, see [EVALUATION.md](EVALUATION.md).
+
+## 🛡️ Guardrails & Safety
+
+This application includes a comprehensive guardrails system to ensure safe, compliant, and responsible AI interactions. See [GUARDRAILS.md](GUARDRAILS.md) for complete documentation.
+
+### Key Safety Features
+
+1. **Input Validation**
+   - Length limits and sanitization
+   - Malicious pattern detection (SQL injection, XSS)
+   - Prohibited content filtering
+
+2. **Content Safety**
+   - Blocks queries about illegal activities (pump & dump, insider trading, etc.)
+   - Flags sensitive topics requiring extra disclaimers
+   - Prevents promotion of risky/unethical practices
+
+3. **Rate Limiting**
+   - 10 queries per minute per session
+   - 100 queries per hour per session
+   - Prevents abuse and DoS attacks
+
+4. **Output Validation**
+   - Sanitizes overly prescriptive language
+   - Automatically adds appropriate disclaimers
+   - Ensures educational tone over financial advice
+
+5. **Compliance**
+   - Educational focus enforcement
+   - Licensed professional referrals
+   - Automatic risk warnings
+
+### Example: Guardrail in Action
+
+```python
+# Prohibited query is blocked
+User: "How can I manipulate stock prices?"
+System: ⚠️ I cannot assist with questions about market manipulation...
+
+# Rate limit protection
+User: [11th query in 1 minute]
+System: ⚠️ Too many requests. Please wait a moment...
+
+# Output sanitization
+Agent: "You must absolutely invest in this!"
+System: "You might consider investing in this..." [with disclaimers]
+```
+
+For detailed information, configuration options, and troubleshooting, see [GUARDRAILS.md](GUARDRAILS.md).
 
 ## 📊 Data Sources
 
