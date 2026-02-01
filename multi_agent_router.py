@@ -1,10 +1,11 @@
 """
 Multi-Agent Router for AI Finance Assistant
 Routes user queries to the most appropriate specialized agent(s).
+Uses LLM-based task planning with reasoning for intelligent routing.
 """
 
 import logging
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 
@@ -68,55 +69,69 @@ class QueryRouter:
         self.llm = llm
         logger.info("QueryRouter initialized")
     
-    def route_query(self, query: str) -> List[str]:
+    def route_query(self, query: str, explain: bool = False) -> Tuple[List[str], str]:
         """
-        Route a query to the most appropriate agent(s).
+        Route a query to the most appropriate agent(s) using LLM-based task planning.
         
         Args:
             query: User's query string
+            explain: Whether to return reasoning (default: False for compatibility)
             
         Returns:
-            List of agent names to handle the query (usually 1, sometimes 2-3)
+            Tuple of (List of agent names, reasoning explanation)
         """
         logger.info(f"Routing query: {query[:100]}...")
         
-        # Create routing prompt
+        # Create routing prompt with reasoning
         agents_info = "\n\n".join([
             f"**{name}**: {desc.strip()}"
             for name, desc in self.AGENT_DESCRIPTIONS.items()
         ])
         
-        system_prompt = f"""You are a query routing expert for a financial AI assistant system.
-Your job is to analyze user queries and determine which specialized agent(s) should handle them.
+        system_prompt = f"""You are an intelligent query routing system for a financial AI assistant.
+You use LLM-based task planning to determine the optimal agent(s) for each query.
 
 Available Agents:
 {agents_info}
 
 Instructions:
-1. Analyze the user's query carefully
-2. Select the MOST appropriate agent(s) to handle it
-3. Usually select ONE agent, but you can select 2-3 if the query requires multiple specialties
-4. Return ONLY the agent names separated by commas (e.g., "market_analyst" or "portfolio_analyzer,market_analyst")
-5. Valid agent names: finance_qa, portfolio_analyzer, market_analyst, goal_planner, tax_educator
+1. Analyze the user's query to understand their intent and information needs
+2. Use task decomposition - break complex queries into component tasks
+3. Select the MOST appropriate agent(s) to handle each task
+4. Usually select ONE agent, but select 2-3 if the query requires multiple specialties
+5. Provide your reasoning for the selection
+
+Response Format:
+AGENTS: [comma-separated agent names]
+REASONING: [brief explanation of why these agents were selected]
+
+Valid agent names: finance_qa, portfolio_analyzer, market_analyst, goal_planner, tax_educator
 
 Examples:
+
 Query: "What is a diversified portfolio?"
-Response: finance_qa
+AGENTS: finance_qa
+REASONING: This is a definitional question about a financial concept, best handled by the educational agent.
 
 Query: "What's the current price of Apple stock?"
-Response: market_analyst
+AGENTS: market_analyst
+REASONING: Requires real-time market data retrieval.
 
-Query: "I have AAPL, MSFT, GOOGL in my portfolio. Analyze it."
-Response: portfolio_analyzer,market_analyst
+Query: "I have AAPL, MSFT, GOOGL in my portfolio. Should I invest more?"
+AGENTS: portfolio_analyzer,market_analyst
+REASONING: Needs portfolio analysis to assess current holdings AND market data for informed recommendations.
 
 Query: "I'm 30 and want to retire at 65. How much should I save?"
-Response: goal_planner
+AGENTS: goal_planner
+REASONING: Retirement planning calculation requiring goal-based financial planning.
 
 Query: "Should I use a Traditional IRA or Roth IRA?"
-Response: tax_educator
+AGENTS: tax_educator
+REASONING: Tax-advantaged account comparison requiring tax education expertise.
 
-Query: "What's Tesla's stock price and should I buy it?"
-Response: market_analyst,finance_qa
+Query: "What's Tesla's stock price and is it a good investment for me?"
+AGENTS: market_analyst,finance_qa
+REASONING: Needs current market data (price) AND educational context about investment evaluation principles.
 
 Now route the following query:"""
 
@@ -127,10 +142,25 @@ Now route the following query:"""
             ]
             
             response = self.llm.invoke(messages)
-            routing_result = response.content.strip().lower()
+            routing_result = response.content.strip()
+            
+            # Parse AGENTS and REASONING
+            agents_line = ""
+            reasoning_line = ""
+            
+            for line in routing_result.split('\n'):
+                if line.startswith('AGENTS:'):
+                    agents_line = line.replace('AGENTS:', '').strip()
+                elif line.startswith('REASONING:'):
+                    reasoning_line = line.replace('REASONING:', '').strip()
+            
+            # Fallback parsing if format not followed
+            if not agents_line:
+                # Try to extract agent names from any format
+                agents_line = routing_result.lower().split('\n')[0]
             
             # Parse agent names
-            agent_names = [name.strip() for name in routing_result.split(',')]
+            agent_names = [name.strip() for name in agents_line.lower().split(',')]
             
             # Validate agent names
             valid_agents = [
@@ -142,14 +172,19 @@ Now route the following query:"""
                 logger.warning(f"No valid agents found in routing result: {routing_result}")
                 # Default to finance_qa for general questions
                 valid_agents = ["finance_qa"]
+                reasoning_line = "Defaulting to general financial education for this query."
             
             logger.info(f"✅ Routed to agents: {', '.join(valid_agents)}")
-            return valid_agents
+            if reasoning_line:
+                logger.info(f"💡 Reasoning: {reasoning_line}")
+            
+            return valid_agents if not explain else (valid_agents, reasoning_line)
             
         except Exception as e:
             logger.error(f"❌ Error routing query: {e}")
             # Default to finance_qa on error
-            return ["finance_qa"]
+            reasoning = "Error in routing - defaulting to general education"
+            return ["finance_qa"] if not explain else (["finance_qa"], reasoning)
     
     def explain_routing(self, query: str, agents: List[str]) -> str:
         """

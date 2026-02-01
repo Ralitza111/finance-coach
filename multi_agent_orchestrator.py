@@ -1,10 +1,13 @@
 """
 Multi-Agent Orchestrator for AI Finance Assistant
 Coordinates multiple agents and synthesizes their responses.
+Supports parallel agent execution for reduced latency.
 """
 
+import asyncio
 import logging
 from typing import Dict, List, Any
+from concurrent.futures import ThreadPoolExecutor
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 
@@ -24,7 +27,9 @@ class MultiAgentOrchestrator:
         """
         self.llm = llm
         self.agents = agents
+        self.executor = ThreadPoolExecutor(max_workers=5)  # For parallel execution
         logger.info(f"MultiAgentOrchestrator initialized with {len(agents)} agents")
+        logger.info("✨ Parallel execution enabled for multiple agents")
     
     def execute_single_agent(
         self,
@@ -61,22 +66,46 @@ class MultiAgentOrchestrator:
         self,
         agent_names: List[str],
         query: str,
-        thread_id: str = "default"
+        thread_id: str = "default",
+        parallel: bool = True
     ) -> str:
         """
         Execute multiple agents and synthesize their responses.
+        Supports parallel execution for reduced latency.
         
         Args:
             agent_names: List of agent names to execute
             query: User's query
             thread_id: Thread ID for conversation history
+            parallel: Whether to execute agents in parallel (default: True)
             
         Returns:
             Synthesized response from all agents
         """
         logger.info(f"Executing multiple agents: {', '.join(agent_names)}")
         
-        # Execute each agent
+        if parallel and len(agent_names) > 1:
+            logger.info("⚡ Using parallel execution for reduced latency")
+            agent_responses = self._execute_agents_parallel(agent_names, query, thread_id)
+        else:
+            # Sequential execution (fallback or single agent)
+            agent_responses = self._execute_agents_sequential(agent_names, query, thread_id)
+        
+        # Synthesize responses
+        if len(agent_responses) == 1:
+            # Single agent, return directly
+            return list(agent_responses.values())[0]
+        else:
+            # Multiple agents, synthesize
+            return self._synthesize_responses(query, agent_responses)
+    
+    def _execute_agents_sequential(
+        self,
+        agent_names: List[str],
+        query: str,
+        thread_id: str
+    ) -> Dict[str, str]:
+        """Execute agents sequentially (original method)."""
         agent_responses = {}
         for agent_name in agent_names:
             if agent_name in self.agents:
@@ -90,14 +119,52 @@ class MultiAgentOrchestrator:
                     agent_responses[agent_name] = f"Error: {str(e)}"
             else:
                 logger.warning(f"Agent {agent_name} not found")
+        return agent_responses
+    
+    def _execute_agents_parallel(
+        self,
+        agent_names: List[str],
+        query: str,
+        thread_id: str
+    ) -> Dict[str, str]:
+        """
+        Execute agents in parallel using ThreadPoolExecutor.
+        Significantly reduces latency when multiple agents are needed.
+        """
+        def execute_agent(agent_name: str) -> tuple:
+            """Helper function to execute a single agent."""
+            if agent_name not in self.agents:
+                logger.warning(f"Agent {agent_name} not found")
+                return agent_name, f"Error: Agent not found"
+            
+            try:
+                agent = self.agents[agent_name]
+                response = agent.invoke(query, thread_id=thread_id)
+                logger.info(f"✅ {agent_name} completed")
+                return agent_name, response
+            except Exception as e:
+                logger.error(f"❌ Error from {agent_name}: {e}")
+                return agent_name, f"Error: {str(e)}"
         
-        # Synthesize responses
-        if len(agent_responses) == 1:
-            # Single agent, return directly
-            return list(agent_responses.values())[0]
-        else:
-            # Multiple agents, synthesize
-            return self._synthesize_responses(query, agent_responses)
+        # Execute all agents in parallel
+        import time
+        start_time = time.time()
+        
+        futures = [
+            self.executor.submit(execute_agent, agent_name)
+            for agent_name in agent_names
+        ]
+        
+        # Collect results
+        agent_responses = {}
+        for future in futures:
+            agent_name, response = future.result()
+            agent_responses[agent_name] = response
+        
+        elapsed = time.time() - start_time
+        logger.info(f"⚡ Parallel execution completed in {elapsed:.2f}s (saved ~{len(agent_names)*2-elapsed:.1f}s)")
+        
+        return agent_responses
     
     def _synthesize_responses(
         self,
