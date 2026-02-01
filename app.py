@@ -23,6 +23,7 @@ from web_scraper import FinancialWebScraper
 from multi_agent_router import create_router, QueryRouter
 from specialized_agents import create_specialized_agents
 from multi_agent_orchestrator import create_orchestrator, MultiAgentOrchestrator
+from guardrails import create_guardrails, FinanceGuardrails
 
 # Setup logging
 log_dir = os.path.join(os.path.dirname(__file__), 'logs')
@@ -83,6 +84,10 @@ class AIFinanceAssistant:
         self.orchestrator = create_orchestrator(self.llm, self.agents)
         logger.info("✅ Router and orchestrator initialized")
         
+        # Initialize guardrails
+        self.guardrails = create_guardrails(self.llm)
+        logger.info("✅ Guardrails system initialized")
+        
         logger.info("🎉 AI Finance Assistant ready!")
     
     def _load_knowledge_base(self, openai_api_key: str):
@@ -110,7 +115,7 @@ class AIFinanceAssistant:
     
     def process_query(self, query: str, thread_id: str = "default") -> tuple:
         """
-        Process a user query through the multi-agent system.
+        Process a user query through the multi-agent system with guardrails.
         
         Args:
             query: User's question
@@ -122,27 +127,49 @@ class AIFinanceAssistant:
         logger.info(f"📥 Processing query: {query[:100]}...")
         
         try:
-            # Route the query
-            agent_names = self.router.route_query(query)
-            routing_info = self.router.explain_routing(query, agent_names)
+            # Step 1: Validate input with guardrails
+            is_valid, sanitized_query, error_msg = self.guardrails.validate_input(query, thread_id)
+            
+            if not is_valid:
+                logger.warning(f"❌ Input validation failed: {error_msg}")
+                return error_msg, "Input validation failed"
+            
+            logger.info("✅ Input validation passed")
+            
+            # Step 2: Check query intent (optional safety check)
+            intent_check = self.guardrails.check_query_intent(sanitized_query)
+            if not intent_check.get("safe", True):
+                logger.warning(f"❌ Query intent check failed")
+                return "⚠️ I cannot assist with this type of query. Please ask about general financial education, investment concepts, or portfolio planning.", "Intent check failed"
+            
+            # Step 3: Route the query
+            agent_names = self.router.route_query(sanitized_query)
+            routing_info = self.router.explain_routing(sanitized_query, agent_names)
             logger.info(f"🔀 {routing_info}")
             
-            # Execute agent(s)
+            # Step 4: Execute agent(s)
             if len(agent_names) == 1:
                 response = self.orchestrator.execute_single_agent(
                     agent_names[0],
-                    query,
+                    sanitized_query,
                     thread_id
                 )
             else:
                 response = self.orchestrator.execute_multiple_agents(
                     agent_names,
-                    query,
+                    sanitized_query,
                     thread_id
                 )
             
-            logger.info(f"✅ Response generated ({len(response)} chars)")
-            return response, routing_info
+            # Step 5: Validate output with guardrails
+            is_valid_output, enhanced_response, output_error = self.guardrails.validate_output(response, sanitized_query)
+            
+            if not is_valid_output:
+                logger.warning(f"❌ Output validation failed: {output_error}")
+                return output_error, routing_info
+            
+            logger.info(f"✅ Response generated and validated ({len(enhanced_response)} chars)")
+            return enhanced_response, routing_info
             
         except Exception as e:
             logger.error(f"❌ Error processing query: {e}", exc_info=True)
